@@ -9,7 +9,7 @@ print("=== HYDRIC GAP CALCULATION WITH LOCATION-SPECIFIC KC ===\n")
 
 # Load Kc and irrigation data calculated from commune agricultural data
 print("Loading Kc and irrigation data for SAFRAN points...")
-kc_data = pd.read_csv('data/safran_commune_kc.csv')
+kc_data = pd.read_csv('data/agreste/safran_commune_kc.csv')
 print(f"Loaded Kc data for {len(kc_data)} SAFRAN points")
 print(kc_data[['LAMBX', 'LAMBY', 'avg_kc', 'pct_irrigated', 'pct_cereals', 'pct_prairies']])
 
@@ -115,23 +115,23 @@ for idx, point_row in tqdm(gdf_joined.iterrows(), total=len(gdf_joined)):
         else:
             gap = 0
         
-        # Store results
+        # Store results with quantized values to reduce file size
         results.append({
             'point': f"({lambx},{lamby})",
             'LAMBX': lambx,
             'LAMBY': lamby,
             'day': date,
-            'P': p,
-            'ETP': etp,
-            'Kc': kc,
-            'Stock': stock,
-            'Gap': gap,
+            'P': round(p, 1),
+            'ETP': round(etp, 1),
+            'Kc': round(kc, 3),
+            'Stock': round(stock, 1),
+            'Gap': round(gap, 1),
             'RU_max': ru_max,
-            'pct_irrigated': pct_irrigated,
-            'pct_cereals': pct_cereals,
-            'pct_prairies': pct_prairies,
-            'pct_permanent': pct_permanent,
-            'pct_vineyards': pct_vineyards
+            'pct_irrigated': round(pct_irrigated, 1),
+            'pct_cereals': round(pct_cereals, 1),
+            'pct_prairies': round(pct_prairies, 1),
+            'pct_permanent': round(pct_permanent, 1),
+            'pct_vineyards': round(pct_vineyards, 1)
         })
 
 # Create DataFrame with results

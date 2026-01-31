@@ -13,14 +13,21 @@ KC_VALUES = {
     'vineyards': 0.70      # Vignes
 }
 
-# Load commune geographic data
+# Load commune geographic data - only needed columns
 print("Loading commune data...")
-commune_geo = pd.read_csv('data/agreste/20230823-communes-departement-region.csv')
+commune_geo = pd.read_csv('data/agreste/20230823-communes-departement-region.csv',
+                          usecols=['code_commune_INSEE', 'latitude', 'longitude', 'nom_commune'])
 print(f"Loaded {len(commune_geo)} communes")
 
-# Load agreste agricultural data
+# Load agreste agricultural data - only needed columns to reduce memory
 print("Loading agreste agricultural data...")
-agreste = pd.read_csv('data/agreste/agreste_2020.csv', sep=';', skiprows=2)
+needed_cols = ['Code', 'SAU en 2020', 
+               'Part de la superficie irriguée dans la SAU, 2020',
+               'Part des céréales et oléo-protéagineux dans la SAU, 2020',
+               'Part des cultures permanentes dans la SAU, 2020',
+               'Part des prairies dans la SAU, 2020',
+               'Part des vignes dans la SAU, 2020']
+agreste = pd.read_csv('data/agreste/agreste_2020.csv', sep=';', skiprows=2, usecols=needed_cols, low_memory=False)
 # Clean column names
 agreste.columns = agreste.columns.str.strip()
 print(f"Loaded {len(agreste)} agricultural records")
@@ -41,12 +48,10 @@ agreste_geo = agreste.merge(
 agreste_geo = agreste_geo.dropna(subset=['latitude', 'longitude'])
 print(f"Communes with coordinates: {len(agreste_geo)}")
 
-# Load gap_results to get SAFRAN points
-print("\nLoading SAFRAN points from gap_results_3samples.csv...")
-gap_results = pd.read_csv('data/gap_results_3samples.csv')
-safran_points = gap_results[['LAMBX', 'LAMBY']].drop_duplicates().reset_index(drop=True)
+sim_path = Path("data/sim/QUOT_SIM2_reduced.csv")
+df_sim = pd.read_csv(sim_path)
+safran_points = df_sim[['LAMBX', 'LAMBY']].drop_duplicates().reset_index(drop=True)
 print(f"Unique SAFRAN points: {len(safran_points)}")
-print(safran_points)
 
 # Convert SAFRAN coordinates from Lambert II étendu (hectometers) to WGS84 (lat/lon)
 # SAFRAN uses Lambert II étendu (EPSG:27582), coordinates are in hectometers (x100 = meters)
@@ -65,14 +70,14 @@ for idx, row in safran_points.iterrows():
 safran_df = pd.DataFrame(safran_latlon)
 
 # Find nearest communes for each SAFRAN point using KDTree (radius search)
-print("\nFinding communes within 50km radius of each SAFRAN point...")
+print("\nFinding communes within 10km radius of each SAFRAN point...")
 
 # Build KDTree for communes
 commune_coords = agreste_geo[['latitude', 'longitude']].values
 commune_tree = cKDTree(commune_coords)
 
 # For each SAFRAN point, find all communes within radius
-radius_km = 50
+radius_km = 10
 radius_deg = radius_km / 111  # Approximate: 1 degree ≈ 111 km
 
 safran_commune_links = []
@@ -159,26 +164,27 @@ for idx, safran in safran_df.iterrows():
     print(f"  Irrigated surface: {weighted_irrigated:.1f}%")
     print(f"  Calculated average Kc: {avg_kc:.3f}")
     
+    # Quantize data to reduce file size
     safran_commune_links.append({
         'LAMBX': safran['LAMBX'],
         'LAMBY': safran['LAMBY'],
-        'lat': safran['lat'],
-        'lon': safran['lon'],
+        'lat': round(safran['lat'], 4),
+        'lon': round(safran['lon'], 4),
         'n_communes': len(nearby_communes),
-        'total_sau': total_sau,
-        'pct_cereals': weighted_cereals,
-        'pct_permanent': weighted_permanent,
-        'pct_prairies': weighted_prairies,
-        'pct_vineyards': weighted_vineyards,
-        'pct_irrigated': weighted_irrigated,
-        'avg_kc': avg_kc
+        'total_sau': round(total_sau, 0),
+        'pct_cereals': round(weighted_cereals, 1),
+        'pct_permanent': round(weighted_permanent, 1),
+        'pct_prairies': round(weighted_prairies, 1),
+        'pct_vineyards': round(weighted_vineyards, 1),
+        'pct_irrigated': round(weighted_irrigated, 1),
+        'avg_kc': round(avg_kc, 3)
     })
 
 # Create DataFrame with results
 df_links = pd.DataFrame(safran_commune_links)
 
 # Save to CSV
-output_path = 'data/safran_commune_kc.csv'
+output_path = 'data/agreste/safran_commune_kc.csv'
 df_links.to_csv(output_path, index=False)
 print(f"\n=== RESULTS SAVED ===")
 print(f"Output file: {output_path}")

@@ -1,0 +1,46 @@
+{
+  "points": [
+    {
+      "id": "(600.0,24010.0)",
+      "lambx": 600.0,
+      "lamby": 24010.0,
+      "ru_max": 120.0,
+      "total_gap": 454.04,
+      "days_with_gap": 161,
+      "max_gap": 7.7,
+      "mean_stock": 72.11,
+      "min_stock": 0.0
+    },
+    {
+      "id": "(760.0,23610.0)",
+      "lambx": 760.0,
+      "lamby": 23610.0,
+      "ru_max": 50.0,
+      "total_gap": 937.39,
+      "days_with_gap": 332,
+      "max_gap": 7.29,
+      "mean_stock": 30.11,
+      "min_stock": 0.0
+    },
+    {
+      "id": "(760.0,23930.0)",
+      "lambx": 760.0,
+      "lamby": 23930.0,
+      "ru_max": 120.0,
+      "total_gap": 533.13,
+      "days_with_gap": 181,
+      "max_gap": 7.2,
+      "mean_stock": 73.93,
+      "min_stock": 0.0
+    }
+  ],
+  "date_range": {
+    "start": "2020-01-01",
+    "end": "2025-12-31"
+  },
+  "metadata": {
+    "total_points": 3,
+    "total_records": 6576,
+    "generated_at": "2026-01-31 15:23:13"
+  }
+}

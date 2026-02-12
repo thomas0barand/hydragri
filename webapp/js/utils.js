@@ -2,24 +2,47 @@
 
 const Utils = {
     
-    // Load JSON data
+    // Load JSON data (metadata only for initial map)
     async loadData() {
         try {
-            const [fullData, metadata] = await Promise.all([
-                d3.json('data/gap_data.json'),
-                d3.json('data/points_metadata.json')
-            ]);
+            // Only load metadata initially (much smaller file)
+            const metadata = await d3.json('data/points_metadata.json');
             
-            // Parse dates in the full data
-            fullData.points.forEach(point => {
-                point.timeseries.forEach(d => {
-                    d.date = new Date(d.date);
-                });
-            });
+            console.log(`Loaded metadata for ${metadata.points.length} points`);
             
-            return { fullData, metadata };
+            return { fullData: null, metadata };
         } catch (error) {
             console.error('Error loading data:', error);
+            throw error;
+        }
+    },
+    
+    // Load full data for a specific point (on-demand loading)
+    async loadPointData(pointId) {
+        try {
+            // In a real production app, you would have individual point files
+            // or a server endpoint that returns data for a specific point
+            // For now, we load the full data file (but cache it)
+            if (!window._cachedFullData) {
+                console.log('Loading full dataset (this may take a moment)...');
+                const fullData = await d3.json('data/gap_data.json');
+                
+                // Parse dates
+                fullData.points.forEach(point => {
+                    point.timeseries.forEach(d => {
+                        d.date = new Date(d.date);
+                    });
+                });
+                
+                window._cachedFullData = fullData;
+                console.log('Full dataset cached');
+            }
+            
+            // Find and return the specific point
+            const point = window._cachedFullData.points.find(p => p.id === pointId);
+            return point;
+        } catch (error) {
+            console.error('Error loading point data:', error);
             throw error;
         }
     },

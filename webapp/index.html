@@ -33,19 +33,20 @@
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="container">
+        <div class="container-fluid">
             
             <!-- Controls Panel -->
             <section class="controls-panel">
                 <div class="control-group">
-                    <label for="point-selector">Select Point:</label>
-                    <select id="point-selector" class="selector">
-                        <option value="">All Points</option>
+                    <label for="metric-selector">Visualization:</label>
+                    <select id="metric-selector" class="selector">
+                        <option value="mean_stock">Soil Water Stock</option>
+                        <option value="total_gap">Water Deficit</option>
                     </select>
                 </div>
                 
                 <div class="control-group">
-                    <label for="year-selector">Select Year:</label>
+                    <label for="year-selector">Year:</label>
                     <select id="year-selector" class="selector">
                         <option value="all">All Years (2020-2025)</option>
                         <option value="2020">2020</option>
@@ -58,96 +59,70 @@
                 </div>
                 
                 <div class="control-group">
-                    <label for="season-selector">Season Filter:</label>
+                    <label for="season-selector">Season:</label>
                     <select id="season-selector" class="selector">
                         <option value="all">All Seasons</option>
-                        <option value="winter">Winter (Dec-Feb)</option>
-                        <option value="spring">Spring (Mar-May)</option>
-                        <option value="summer">Summer (Jun-Aug)</option>
-                        <option value="fall">Fall (Sep-Nov)</option>
+                        <option value="winter">Winter</option>
+                        <option value="spring">Spring</option>
+                        <option value="summer">Summer</option>
+                        <option value="fall">Fall</option>
                     </select>
                 </div>
                 
                 <div class="control-group">
-                    <button id="reset-button" class="btn-reset">Reset View</button>
+                    <button id="close-timeseries" class="btn-close" style="display: none;">✕ Close Time Series</button>
                 </div>
             </section>
 
-            <!-- Visualization Grid -->
-            <div class="viz-grid">
+            <!-- Visualization Container -->
+            <div class="viz-container-wrapper">
                 
-                <!-- Map Container -->
-                <section class="viz-section map-section">
-                    <div class="section-header">
-                        <h2>SAFRAN Points Map</h2>
-                        <p class="section-description">Click on a point to view its time series</p>
-                    </div>
+                <!-- Map Section (Full width initially) -->
+                <section class="viz-section map-section" id="map-section">
                     <div id="map-container" class="viz-container">
                         <div class="loading">Loading map...</div>
                     </div>
                     
                     <!-- Map Legend -->
-                    <div class="legend" id="map-legend">
-                        <h3>Total Gap (mm)</h3>
+                    <div class="map-legend-overlay" id="map-legend">
+                        <h3>Soil Water Stock (mm)</h3>
                         <div class="legend-scale" id="legend-scale"></div>
                         <div class="legend-labels">
-                            <span class="legend-label-min">Low deficit</span>
-                            <span class="legend-label-max">High deficit</span>
-                        </div>
-                        <div class="legend-info">
-                            <p><strong>Circle size:</strong> Soil water reserve (RU)</p>
+                            <span class="legend-label-min">Low</span>
+                            <span class="legend-label-max">High</span>
                         </div>
                     </div>
                 </section>
 
-                <!-- Time Series Container -->
-                <section class="viz-section timeseries-section">
+                <!-- Time Series Section (Hidden initially, slides in on click) -->
+                <section class="viz-section timeseries-section" id="timeseries-section" style="display: none;">
                     <div class="section-header">
                         <h2>Water Balance Time Series</h2>
-                        <p class="section-description" id="selected-point-info">Select a point on the map</p>
+                        <p class="section-description" id="selected-point-info">Point data</p>
                     </div>
                     <div id="timeseries-container" class="viz-container">
-                        <div class="loading">Select a point to view time series</div>
+                        <div class="loading">Loading time series...</div>
                     </div>
                     
-                    <!-- Time Series Legend -->
-                    <div class="legend" id="timeseries-legend">
-                        <h3>Variables</h3>
-                        <div class="legend-items">
-                            <div class="legend-item">
-                                <span class="legend-color" style="background: #91bfdb;"></span>
-                                <span class="legend-text">P - Precipitation (mm)</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-color" style="background: #fc8d59;"></span>
-                                <span class="legend-text">ETP - Evapotranspiration (mm)</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-color" style="background: #4575b4;"></span>
-                                <span class="legend-text">Stock - Soil water reserve (mm)</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-color" style="background: #d73027;"></span>
-                                <span class="legend-text">Gap - Water deficit (mm)</span>
-                            </div>
-                        </div>
+                    <!-- Time Series Controls -->
+                    <div class="timeseries-controls">
                         <div class="legend-toggle">
-                            <label><input type="checkbox" id="toggle-p" checked> Show P</label>
-                            <label><input type="checkbox" id="toggle-etp" checked> Show ETP</label>
-                            <label><input type="checkbox" id="toggle-stock" checked> Show Stock</label>
-                            <label><input type="checkbox" id="toggle-gap" checked> Show Gap</label>
+                            <label><input type="checkbox" id="toggle-p" checked> <span style="color: #91bfdb;">●</span> Precipitation</label>
+                            <label><input type="checkbox" id="toggle-etp" checked> <span style="color: #fc8d59;">●</span> ETP</label>
+                            <label><input type="checkbox" id="toggle-stock" checked> <span style="color: #4575b4;">●</span> Stock</label>
+                            <label><input type="checkbox" id="toggle-gap" checked> <span style="color: #d73027;">●</span> Gap</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Statistics Panel -->
+                    <div class="stats-panel-inline" id="stats-panel">
+                        <h3>Statistics</h3>
+                        <div class="stats-grid" id="stats-content">
+                            <p>Loading statistics...</p>
                         </div>
                     </div>
                 </section>
             </div>
-
-            <!-- Statistics Panel -->
-            <section class="stats-panel" id="stats-panel">
-                <h3>Statistics</h3>
-                <div class="stats-grid" id="stats-content">
-                    <p>Select a point to view statistics</p>
-                </div>
-            </section>
 
         </div>
     </main>
@@ -156,13 +131,17 @@
     <footer class="footer">
         <div class="container">
             <p>
-                Data sources: Météo-France (SAFRAN-ISBA-MODCOU), INRAE (RPG Sol et Climat), GIS Sol (BDGSF)
+                <strong>Data sources:</strong> Météo-France (SAFRAN-ISBA-MODCOU 8km grid, 9,892 points), 
+                INRAE (RPG Sol et Climat), GIS Sol (BDGSF) | 
+                <strong>Period:</strong> 2020-2025 (6 years)
             </p>
             <p>
-                <strong>Gap Formula:</strong> Gap = Besoin - (P + Stock), where Besoin = ETP × Kc
+                <strong>Gap Formula:</strong> Gap = Besoin - (P + Stock), where Besoin = ETP × Kc | 
+                <strong>Spatial interpolation:</strong> Inverse Distance Weighting (k=5, power=2)
             </p>
             <p class="credits">
-                Visualization created with D3.js | Project: Agricultural Water Management in France
+                Interactive visualization created with D3.js v7 | 
+                Project: Agricultural Water Management and Climate Adaptation in France
             </p>
         </div>
     </footer>

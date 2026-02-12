@@ -156,35 +156,151 @@ const TimeSeriesViz = {
             );
     },
     
-    // Draw seasonal highlights (summer)
+    // Draw seasonal highlights (summer) and gaps for excluded data
     drawSeasonalHighlights(timeseries) {
-        const years = [...new Set(timeseries.map(d => d.date.getFullYear()))];
+        // Only draw summer highlights if no season filter is active
+        const currentSeason = window.App?.currentFilters?.season || 'all';
         
-        years.forEach(year => {
-            const summerStart = new Date(year, 5, 1); // June 1
-            const summerEnd = new Date(year, 7, 31);   // August 31
+        if (currentSeason === 'all') {
+            // Draw summer highlights
+            const years = [...new Set(timeseries.map(d => d.date.getFullYear()))];
             
-            if (summerStart >= this.xScale.domain()[0] && 
-                summerEnd <= this.xScale.domain()[1]) {
+            years.forEach(year => {
+                const summerStart = new Date(year, 5, 1); // June 1
+                const summerEnd = new Date(year, 7, 31);   // August 31
                 
-                this.chartGroup.append('rect')
-                    .attr('x', this.xScale(summerStart))
+                if (summerStart >= this.xScale.domain()[0] && 
+                    summerEnd <= this.xScale.domain()[1]) {
+                    
+                    this.chartGroup.append('rect')
+                        .attr('x', this.xScale(summerStart))
+                        .attr('y', 0)
+                        .attr('width', this.xScale(summerEnd) - this.xScale(summerStart))
+                        .attr('height', this.chartHeight)
+                        .attr('fill', '#fff3cd')
+                        .attr('opacity', 0.2)
+                        .attr('pointer-events', 'none');
+                    
+                    // Add summer label
+                    this.chartGroup.append('text')
+                        .attr('x', (this.xScale(summerStart) + this.xScale(summerEnd)) / 2)
+                        .attr('y', 15)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '10px')
+                        .attr('fill', '#856404')
+                        .attr('opacity', 0.5)
+                        .text('Summer');
+                }
+            });
+        } else {
+            // Draw gaps for excluded data when season filter is active
+            this.drawExcludedDataGaps(timeseries, currentSeason);
+        }
+    },
+    
+    // Draw hatched rectangles for excluded data periods
+    drawExcludedDataGaps(timeseries, selectedSeason) {
+        if (!timeseries || timeseries.length === 0) return;
+        
+        // Get full date range
+        const fullStart = this.xScale.domain()[0];
+        const fullEnd = this.xScale.domain()[1];
+        
+        // Create pattern for hatching
+        const defs = this.svg.select('defs').empty() 
+            ? this.svg.append('defs') 
+            : this.svg.select('defs');
+        
+        // Remove existing pattern
+        defs.selectAll('#diagonal-hatch').remove();
+        
+        const pattern = defs.append('pattern')
+            .attr('id', 'diagonal-hatch')
+            .attr('patternUnits', 'userSpaceOnUse')
+            .attr('width', 8)
+            .attr('height', 8);
+        
+        pattern.append('path')
+            .attr('d', 'M-1,1 l2,-2 M0,8 l8,-8 M7,9 l2,-2')
+            .attr('stroke', '#999')
+            .attr('stroke-width', 1)
+            .attr('opacity', 0.3);
+        
+        // Define season months
+        const seasonMonths = {
+            'winter': [11, 0, 1], // Dec, Jan, Feb
+            'spring': [2, 3, 4],   // Mar, Apr, May
+            'summer': [5, 6, 7],   // Jun, Jul, Aug
+            'fall': [8, 9, 10]     // Sep, Oct, Nov
+        };
+        
+        const includedMonths = seasonMonths[selectedSeason];
+        
+        // Find gaps (excluded periods)
+        const gaps = [];
+        let currentGapStart = null;
+        
+        // Generate all days in range
+        let current = new Date(fullStart);
+        const end = new Date(fullEnd);
+        
+        while (current <= end) {
+            const month = current.getMonth();
+            const isIncluded = includedMonths.includes(month);
+            
+            if (!isIncluded && currentGapStart === null) {
+                // Start of gap
+                currentGapStart = new Date(current);
+            } else if (isIncluded && currentGapStart !== null) {
+                // End of gap
+                gaps.push({
+                    start: currentGapStart,
+                    end: new Date(current)
+                });
+                currentGapStart = null;
+            }
+            
+            // Move to next day
+            current.setDate(current.getDate() + 1);
+        }
+        
+        // Close last gap if still open
+        if (currentGapStart !== null) {
+            gaps.push({
+                start: currentGapStart,
+                end: end
+            });
+        }
+        
+        // Draw gap rectangles
+        const gapGroup = this.chartGroup.insert('g', ':first-child')
+            .attr('class', 'excluded-data-gaps');
+        
+        gaps.forEach(gap => {
+            if (gap.start >= fullStart && gap.end <= fullEnd) {
+                gapGroup.append('rect')
+                    .attr('x', this.xScale(gap.start))
                     .attr('y', 0)
-                    .attr('width', this.xScale(summerEnd) - this.xScale(summerStart))
+                    .attr('width', Math.max(1, this.xScale(gap.end) - this.xScale(gap.start)))
                     .attr('height', this.chartHeight)
-                    .attr('fill', '#fff3cd')
-                    .attr('opacity', 0.2)
+                    .attr('fill', 'url(#diagonal-hatch)')
+                    .attr('stroke', '#ddd')
+                    .attr('stroke-width', 1)
                     .attr('pointer-events', 'none');
                 
-                // Add summer label
-                this.chartGroup.append('text')
-                    .attr('x', (this.xScale(summerStart) + this.xScale(summerEnd)) / 2)
-                    .attr('y', 15)
-                    .attr('text-anchor', 'middle')
-                    .attr('font-size', '10px')
-                    .attr('fill', '#856404')
-                    .attr('opacity', 0.5)
-                    .text('Summer');
+                // Add label for larger gaps
+                const gapWidth = this.xScale(gap.end) - this.xScale(gap.start);
+                if (gapWidth > 50) {
+                    gapGroup.append('text')
+                        .attr('x', (this.xScale(gap.start) + this.xScale(gap.end)) / 2)
+                        .attr('y', this.chartHeight / 2)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '11px')
+                        .attr('fill', '#666')
+                        .attr('opacity', 0.6)
+                        .attr('pointer-events', 'none')
+                        .text('Excluded');
+                }
             }
         });
     },

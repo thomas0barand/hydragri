@@ -1,4 +1,4 @@
-// Map Visualization Module
+// Map Visualization Module with Spatial Interpolation
 
 const MapViz = {
     svg: null,
@@ -6,10 +6,11 @@ const MapViz = {
     height: 0,
     projection: null,
     colorScale: null,
-    sizeScale: null,
     pointsData: null,
     selectedPoint: null,
     onPointClick: null,
+    currentMetric: 'mean_stock', // Default metric to visualize
+    gridData: null,
     
     // Initialize the map
     init(containerId, points, onClickCallback) {
@@ -29,110 +30,227 @@ const MapViz = {
             .attr('width', this.width)
             .attr('height', this.height);
         
-        // Set up projection for France (Lambert II étendu approximation)
-        // Using Conic Conformal projection centered on France
-        this.projection = d3.geoConicConformal()
-            .center([2.5, 46.5])
-            .scale(3000)
-            .translate([this.width / 2, this.height / 2]);
+        // Create defs for gradients
+        const defs = this.svg.append('defs');
         
-        // Set up color scale (inverted so blue = low gap, red = high gap)
-        const maxGap = d3.max(points, d => d.total_gap);
+        // Add blur filter for smooth interpolation
+        const filter = defs.append('filter')
+            .attr('id', 'blur')
+            .attr('x', '-50%')
+            .attr('y', '-50%')
+            .attr('width', '200%')
+            .attr('height', '200%');
+        
+        filter.append('feGaussianBlur')
+            .attr('in', 'SourceGraphic')
+            .attr('stdDeviation', '30');
+        
+        // Set up color scale for stock (blue gradient with better contrast)
+        const stockExtent = d3.extent(points, d => d.mean_stock);
         this.colorScale = d3.scaleSequential()
-            .domain([0, maxGap])
-            .interpolator(d3.interpolateRdYlBu)
-            .clamp(true);
+            .domain(stockExtent)
+            .interpolator(t => d3.interpolateBlues(0.3 + t * 0.7)); // Use 30-100% of the color range for better contrast
         
-        // Reverse the color scale (blue for low, red for high)
-        const originalScale = this.colorScale;
-        this.colorScale = (value) => originalScale(maxGap - value);
+        // Create main group
+        this.mainGroup = this.svg.append('g');
         
-        // Set up size scale for RU
-        const ruExtent = d3.extent(points, d => d.ru_max);
-        this.sizeScale = d3.scaleSqrt()
-            .domain(ruExtent)
-            .range([6, 15]);
-        
-        // Draw France outline (simplified rectangle)
+        // Draw France outline
         this.drawFranceOutline();
         
-        // Draw points
-        this.drawPoints();
+        // Draw interpolated heatmap
+        this.drawHeatmap();
+        
+        // Draw invisible points for interaction
+        this.drawInteractionLayer();
         
         // Update legend
-        this.updateLegend(maxGap);
-    },
-    
-    // Draw simplified France outline
-    drawFranceOutline() {
-        // Draw a background rectangle representing France's approximate extent
-        const coords = [
-            [Utils.getLambertCoordinates(600, 24010)],
-            [Utils.getLambertCoordinates(1200, 24010)],
-            [Utils.getLambertCoordinates(1200, 16170)],
-            [Utils.getLambertCoordinates(600, 16170)]
-        ];
-        
-        this.svg.append('rect')
-            .attr('x', 50)
-            .attr('y', 50)
-            .attr('width', this.width - 100)
-            .attr('height', this.height - 100)
-            .attr('fill', '#f0f0f0')
-            .attr('stroke', '#999')
-            .attr('stroke-width', 2)
-            .attr('rx', 5);
+        this.updateLegend(stockExtent);
         
         // Add title
-        this.svg.append('text')
-            .attr('x', this.width / 2)
-            .attr('y', 30)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '14px')
-            .attr('font-weight', 'bold')
-            .attr('fill', '#333')
-            .text('SAFRAN Grid Points');
+        this.addTitle();
     },
     
-    // Draw SAFRAN points
-    drawPoints() {
-        const self = this;
+    // Draw France outline (will be updated after heatmap calculates bounds)
+    drawFranceOutline() {
+        // This will be drawn after heatmap to use correct bounds
+    },
+    
+    // Draw interpolated heatmap
+    drawHeatmap() {
+        // Calculate position scales
+        const xExtent = d3.extent(this.pointsData, d => d.lambx);
+        const yExtent = d3.extent(this.pointsData, d => d.lamby);
         
-        // Create a group for points
-        const pointsGroup = this.svg.append('g')
-            .attr('class', 'points-group');
+        // Calculate aspect ratio of the data
+        const dataWidth = xExtent[1] - xExtent[0];
+        const dataHeight = yExtent[1] - yExtent[0];
+        const dataAspectRatio = dataWidth / dataHeight;
         
-        // Calculate positions manually based on coordinate ranges
+        // Calculate available space
+        const padding = 80;
+        const availableWidth = this.width - 2 * padding;
+        const availableHeight = this.height - 2 * padding;
+        const containerAspectRatio = availableWidth / availableHeight;
+        
+        // Determine scaling to fit the map properly
+        let mapWidth, mapHeight, offsetX, offsetY;
+        if (dataAspectRatio > containerAspectRatio) {
+            // Data is wider - fit to width
+            mapWidth = availableWidth;
+            mapHeight = availableWidth / dataAspectRatio;
+            offsetX = padding;
+            offsetY = (this.height - mapHeight) / 2;
+        } else {
+            // Data is taller - fit to height
+            mapHeight = availableHeight;
+            mapWidth = availableHeight * dataAspectRatio;
+            offsetX = (this.width - mapWidth) / 2;
+            offsetY = padding;
+        }
+        
         const xScale = d3.scaleLinear()
-            .domain([600, 1200])
-            .range([100, this.width - 100]);
+            .domain(xExtent)
+            .range([offsetX, offsetX + mapWidth]);
         
         const yScale = d3.scaleLinear()
-            .domain([16170, 26810])
-            .range([this.height - 100, 100]);
+            .domain(yExtent)
+            .range([offsetY + mapHeight, offsetY]);
         
-        // Draw points
-        const circles = pointsGroup.selectAll('circle')
+        // Store scales for reuse
+        this.xScale = xScale;
+        this.yScale = yScale;
+        this.mapBounds = { offsetX, offsetY, mapWidth, mapHeight };
+        
+        // Create grid for interpolation
+        const gridSize = 50; // Resolution of the interpolation grid
+        const gridWidth = Math.ceil(mapWidth / gridSize);
+        const gridHeight = Math.ceil(mapHeight / gridSize);
+        
+        // Create contour data using Voronoi-based interpolation
+        const contourData = [];
+        
+        // Generate grid points and interpolate values
+        for (let i = 0; i < gridWidth; i++) {
+            for (let j = 0; j < gridHeight; j++) {
+                const x = offsetX + i * gridSize;
+                const y = offsetY + j * gridSize;
+                
+                // Find nearest data point (inverse distance weighting)
+                let value = this.interpolateValue(x, y, xScale, yScale);
+                
+                if (value !== null) {
+                    contourData.push({
+                        x: x,
+                        y: y,
+                        value: value
+                    });
+                }
+            }
+        }
+        
+        // Draw map boundary
+        this.mainGroup.append('rect')
+            .attr('class', 'map-boundary')
+            .attr('x', offsetX - 10)
+            .attr('y', offsetY - 10)
+            .attr('width', mapWidth + 20)
+            .attr('height', mapHeight + 20)
+            .attr('fill', 'none')
+            .attr('stroke', '#2c3e50')
+            .attr('stroke-width', 3)
+            .attr('rx', 8);
+        
+        // Draw heatmap cells
+        const heatmapGroup = this.mainGroup.append('g')
+            .attr('class', 'heatmap-layer')
+            .attr('opacity', 0.85);
+        
+        heatmapGroup.selectAll('rect')
+            .data(contourData)
+            .join('rect')
+            .attr('x', d => d.x)
+            .attr('y', d => d.y)
+            .attr('width', gridSize)
+            .attr('height', gridSize)
+            .attr('fill', d => this.colorScale(d.value))
+            .attr('stroke', 'none')
+            .style('filter', 'url(#blur)');
+    },
+    
+    // Interpolate value at position using inverse distance weighting
+    interpolateValue(x, y, xScale, yScale) {
+        const k = 8; // Number of nearest neighbors (increased for smoother interpolation)
+        const power = 2.5; // IDW power parameter (increased for more localized influence)
+        
+        // Calculate distances to all points
+        const distances = this.pointsData.map(point => {
+            const px = xScale(point.lambx);
+            const py = yScale(point.lamby);
+            const dist = Math.sqrt(Math.pow(x - px, 2) + Math.pow(y - py, 2));
+            return {
+                point: point,
+                distance: dist
+            };
+        });
+        
+        // Sort by distance and take k nearest
+        distances.sort((a, b) => a.distance - b.distance);
+        const nearest = distances.slice(0, k);
+        
+        // If closest point is very close, use its value directly
+        if (nearest[0].distance < 1) {
+            return nearest[0].point[this.currentMetric];
+        }
+        
+        // Inverse distance weighting
+        let weightSum = 0;
+        let valueSum = 0;
+        
+        for (let item of nearest) {
+            if (item.distance === 0) continue;
+            const weight = 1 / Math.pow(item.distance, power);
+            weightSum += weight;
+            valueSum += weight * item.point[this.currentMetric];
+        }
+        
+        return weightSum > 0 ? valueSum / weightSum : null;
+    },
+    
+    // Draw invisible interaction layer
+    drawInteractionLayer() {
+        const self = this;
+        
+        // Use stored scales from heatmap
+        const xScale = this.xScale;
+        const yScale = this.yScale;
+        
+        // Create interaction points
+        const interactionGroup = this.mainGroup.append('g')
+            .attr('class', 'interaction-layer');
+        
+        interactionGroup.selectAll('circle')
             .data(this.pointsData)
             .join('circle')
-            .attr('class', 'point-circle')
             .attr('cx', d => xScale(d.lambx))
             .attr('cy', d => yScale(d.lamby))
-            .attr('r', d => this.sizeScale(d.ru_max))
-            .attr('fill', d => this.colorScale(d.total_gap))
-            .attr('opacity', 0.8)
+            .attr('r', 8)
+            .attr('fill', 'transparent')
+            .attr('stroke', 'transparent')
+            .attr('stroke-width', 2)
+            .style('cursor', 'pointer')
             .on('mouseover', function(event, d) {
                 d3.select(this)
-                    .attr('opacity', 1)
-                    .attr('r', self.sizeScale(d.ru_max) * 1.3);
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 3)
+                    .attr('fill', 'rgba(255, 255, 255, 0.2)');
                 
                 self.showTooltip(d, event);
             })
             .on('mouseout', function(event, d) {
                 if (self.selectedPoint?.id !== d.id) {
                     d3.select(this)
-                        .attr('opacity', 0.8)
-                        .attr('r', self.sizeScale(d.ru_max));
+                        .attr('stroke', 'transparent')
+                        .attr('fill', 'transparent');
                 }
                 Utils.hideTooltip();
             })
@@ -142,30 +260,17 @@ const MapViz = {
                     self.onPointClick(d);
                 }
             });
-        
-        // Add labels for points
-        pointsGroup.selectAll('text')
-            .data(this.pointsData)
-            .join('text')
-            .attr('x', d => xScale(d.lambx))
-            .attr('y', d => yScale(d.lamby) - this.sizeScale(d.ru_max) - 5)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '10px')
-            .attr('fill', '#333')
-            .attr('pointer-events', 'none')
-            .text(d => `(${d.lambx}, ${d.lamby})`);
     },
     
     // Show tooltip
     showTooltip(point, event) {
         const content = `
-            <strong>${point.id}</strong>
+            <strong>Point (${point.lambx}, ${point.lamby})</strong>
             <div style="margin-top: 8px;">
-                <div>Total Gap: <strong>${Utils.formatNumber(point.total_gap)} mm</strong></div>
+                <div>Mean Stock: <strong>${Utils.formatNumber(point.mean_stock, 1)} mm</strong></div>
+                <div>Total Gap: <strong>${Utils.formatNumber(point.total_gap, 1)} mm</strong></div>
                 <div>Days with Gap: <strong>${point.days_with_gap}</strong></div>
-                <div>Max Gap: <strong>${Utils.formatNumber(point.max_gap)} mm</strong></div>
-                <div>RU (Soil Reserve): <strong>${Utils.formatNumber(point.ru_max)} mm</strong></div>
-                <div>Mean Stock: <strong>${Utils.formatNumber(point.mean_stock)} mm</strong></div>
+                <div>RU (Soil Reserve): <strong>${Utils.formatNumber(point.ru_max, 0)} mm</strong></div>
             </div>
             <div style="margin-top: 8px; font-size: 0.85em; opacity: 0.8;">
                 Click to view time series
@@ -175,34 +280,98 @@ const MapViz = {
     },
     
     // Select a point
-    selectPoint(point) {
+    selectPoint(point, xScale, yScale) {
         this.selectedPoint = point;
         
+        // Use stored scales if not provided
+        const xScaleToUse = xScale || this.xScale;
+        const yScaleToUse = yScale || this.yScale;
+        
         // Update visual selection
-        this.svg.selectAll('.point-circle')
-            .classed('selected', d => d.id === point.id)
-            .attr('opacity', d => d.id === point.id ? 1 : 0.6);
+        this.mainGroup.selectAll('.interaction-layer circle')
+            .attr('stroke', d => d.id === point.id ? '#fff' : 'transparent')
+            .attr('stroke-width', d => d.id === point.id ? 3 : 2)
+            .attr('fill', d => d.id === point.id ? 'rgba(255, 255, 255, 0.3)' : 'transparent')
+            .attr('r', d => d.id === point.id ? 12 : 8);
+        
+        // Add selection marker
+        this.mainGroup.selectAll('.selection-marker').remove();
+        this.mainGroup.append('circle')
+            .attr('class', 'selection-marker')
+            .attr('cx', xScaleToUse(point.lambx))
+            .attr('cy', yScaleToUse(point.lamby))
+            .attr('r', 20)
+            .attr('fill', 'none')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 3)
+            .attr('stroke-dasharray', '5,5')
+            .style('pointer-events', 'none')
+            .style('animation', 'pulse 2s ease-in-out infinite');
     },
     
     // Clear selection
     clearSelection() {
         this.selectedPoint = null;
-        this.svg.selectAll('.point-circle')
-            .classed('selected', false)
-            .attr('opacity', 0.8);
+        this.mainGroup.selectAll('.interaction-layer circle')
+            .attr('stroke', 'transparent')
+            .attr('fill', 'transparent')
+            .attr('r', 8);
+        this.mainGroup.selectAll('.selection-marker').remove();
+    },
+    
+    // Update metric being displayed
+    updateMetric(metric) {
+        this.currentMetric = metric;
+        
+        // Update color scale with adjusted range for better contrast
+        const extent = d3.extent(this.pointsData, d => d[metric]);
+        const baseInterpolator = metric === 'total_gap' ? d3.interpolateReds : d3.interpolateBlues;
+        const adjustedInterpolator = t => baseInterpolator(0.3 + t * 0.7);
+        this.colorScale.domain(extent).interpolator(adjustedInterpolator);
+        
+        // Redraw heatmap (remove both heatmap and boundary)
+        this.mainGroup.select('.heatmap-layer').remove();
+        this.mainGroup.select('.map-boundary').remove();
+        this.drawHeatmap();
+        
+        // Update legend
+        this.updateLegend(extent);
+    },
+    
+    // Add title
+    addTitle() {
+        this.svg.append('text')
+            .attr('class', 'map-title')
+            .attr('x', this.width / 2)
+            .attr('y', 30)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '20px')
+            .attr('font-weight', '600')
+            .attr('fill', '#2c3e50')
+            .text('Water Balance across France - SAFRAN Grid');
     },
     
     // Update legend
-    updateLegend(maxGap) {
-        const legendScale = d3.select('#legend-scale');
+    updateLegend(extent) {
+        const legendId = '#map-legend';
+        const legend = d3.select(legendId);
         
-        // Update gradient
-        legendScale.style('background', 
-            'linear-gradient(to right, #4575b4, #91bfdb, #fee090, #fc8d59, #d73027)');
+        if (legend.empty()) return;
         
-        // Update labels
-        d3.select('.legend-label-min').text(`0 mm`);
-        d3.select('.legend-label-max').text(`${Utils.formatNumber(maxGap, 0)} mm`);
+        // Update text labels
+        const metricName = this.currentMetric === 'total_gap' ? 'Water Deficit' : 'Soil Water Stock';
+        const unit = 'mm';
+        
+        legend.select('h3').text(`${metricName} (${unit})`);
+        legend.select('.legend-label-min').text(`${Utils.formatNumber(extent[0], 0)} ${unit}`);
+        legend.select('.legend-label-max').text(`${Utils.formatNumber(extent[1], 0)} ${unit}`);
+        
+        // Update gradient (matching the adjusted color ranges)
+        const gradientColors = this.currentMetric === 'total_gap' 
+            ? 'linear-gradient(to right, #fee5d9, #fcae91, #fb6a4a, #de2d26, #a50f15)'
+            : 'linear-gradient(to right, #c6dbef, #9ecae1, #6baed6, #4292c6, #2171b5, #08519c, #08306b)';
+        
+        legend.select('.legend-scale').style('background', gradientColors);
     },
     
     // Resize map
@@ -212,12 +381,16 @@ const MapViz = {
         this.width = containerNode.clientWidth;
         this.height = containerNode.clientHeight;
         
-        if (this.svg) {
-            this.svg.attr('width', this.width).attr('height', this.height);
-            // Redraw everything
-            this.svg.selectAll('*').remove();
-            this.drawFranceOutline();
-            this.drawPoints();
+        if (this.svg && this.pointsData) {
+            // Reinitialize with current data
+            const callback = this.onPointClick;
+            const points = this.pointsData;
+            this.init('map-container', points, callback);
+            
+            // Restore selection if exists
+            if (this.selectedPoint) {
+                this.selectPoint(this.selectedPoint);
+            }
         }
     }
 };

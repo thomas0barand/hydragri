@@ -37,58 +37,40 @@ const App = {
     async loadData() {
         console.log('Loading data...');
         const { fullData, metadata } = await Utils.loadData();
-        this.data = fullData;
+        this.data = fullData;  // Will be null initially
         this.metadata = metadata;
-        console.log(`Loaded ${this.data.points.length} points`);
-        
-        // Populate point selector
-        this.populatePointSelector();
+        console.log(`Loaded metadata for ${this.metadata.points.length} points`);
     },
     
     // Initialize visualizations
     initVisualizations() {
         console.log('Initializing visualizations...');
         
-        // Initialize map
+        // Initialize map with metadata
         MapViz.init('map-container', this.metadata.points, (point) => {
             this.onPointSelected(point);
         });
         
-        // Initialize time series
+        // Initialize time series (but keep it hidden initially)
         TimeSeriesViz.init('timeseries-container');
         
-        // Select first point by default
-        if (this.data.points.length > 0) {
-            this.selectPoint(this.data.points[0].id);
-        }
+        // Don't select any point by default - let user click on map
+        console.log('Map ready. Click on a point to view time series.');
     },
     
-    // Populate point selector
+    // Populate point selector (removed - not needed in new design)
     populatePointSelector() {
-        const selector = d3.select('#point-selector');
-        
-        // Add options
-        this.data.points.forEach(point => {
-            selector.append('option')
-                .attr('value', point.id)
-                .text(`${point.id} (Gap: ${Utils.formatNumber(point.total_gap)} mm)`);
-        });
+        // Point selection is now done by clicking on map
+        // No dropdown selector needed
     },
     
     // Set up controls
     setupControls() {
         const self = this;
         
-        // Point selector
-        d3.select('#point-selector').on('change', function() {
-            const pointId = this.value;
-            if (pointId) {
-                self.selectPoint(pointId);
-            } else {
-                MapViz.clearSelection();
-                TimeSeriesViz.init('timeseries-container');
-                self.clearStats();
-            }
+        // Metric selector (for map visualization)
+        d3.select('#metric-selector').on('change', function() {
+            MapViz.updateMetric(this.value);
         });
         
         // Year selector
@@ -103,9 +85,9 @@ const App = {
             self.updateVisualization();
         });
         
-        // Reset button
-        d3.select('#reset-button').on('click', () => {
-            this.resetFilters();
+        // Close time series button
+        d3.select('#close-timeseries').on('click', () => {
+            this.hideTimeSeries();
         });
         
         // Series toggle checkboxes
@@ -137,34 +119,73 @@ const App = {
     },
     
     // Select a point
-    selectPoint(pointId) {
-        const point = this.data.points.find(p => p.id === pointId);
-        if (!point) return;
-        
-        this.currentFilters.selectedPoint = point;
-        
-        // Update point selector
-        d3.select('#point-selector').property('value', pointId);
-        
-        // Update map selection
-        const metadataPoint = this.metadata.points.find(p => p.id === pointId);
-        if (metadataPoint) {
-            MapViz.selectPoint(metadataPoint);
+    async selectPoint(pointId) {
+        try {
+            // Show loading state
+            d3.select('#timeseries-container .loading').style('display', 'flex');
+            d3.select('#stats-content').html('<p>Loading data...</p>');
+            
+            // Load point data on-demand
+            const point = await Utils.loadPointData(pointId);
+            if (!point) {
+                console.error('Point not found:', pointId);
+                return;
+            }
+            
+            this.currentFilters.selectedPoint = point;
+            
+            // Update map selection
+            const metadataPoint = this.metadata.points.find(p => p.id === pointId);
+            if (metadataPoint) {
+                MapViz.selectPoint(metadataPoint);
+            }
+            
+            // Hide loading state
+            d3.select('#timeseries-container .loading').style('display', 'none');
+            
+            // Update visualization
+            this.updateVisualization();
+            
+            // Update statistics
+            this.updateStatistics(point);
+        } catch (error) {
+            console.error('Error selecting point:', error);
+            d3.select('#timeseries-container').html('<div class="loading" style="color: red;">Error loading data</div>');
         }
-        
-        // Update visualization
-        this.updateVisualization();
-        
-        // Update statistics
-        this.updateStatistics(point);
     },
     
     // Point selected from map
     onPointSelected(metadataPoint) {
-        const point = this.data.points.find(p => p.id === metadataPoint.id);
-        if (point) {
-            this.selectPoint(point.id);
+        // Just show the panel and load the point data
+        this.showTimeSeries();
+        this.selectPoint(metadataPoint.id);  // Use the metadata point's id directly
+    },
+    
+    // Show time series panel
+    showTimeSeries() {
+        const timeseriesSection = d3.select('#timeseries-section');
+        const closeButton = d3.select('#close-timeseries');
+        
+        timeseriesSection.style('display', 'flex');
+        closeButton.style('display', 'inline-block');
+        
+        // Initialize time series if not already done
+        if (!TimeSeriesViz.svg) {
+            TimeSeriesViz.init('timeseries-container');
         }
+    },
+    
+    // Hide time series panel
+    hideTimeSeries() {
+        const timeseriesSection = d3.select('#timeseries-section');
+        const closeButton = d3.select('#close-timeseries');
+        
+        timeseriesSection.style('display', 'none');
+        closeButton.style('display', 'none');
+        
+        // Clear map selection
+        MapViz.clearSelection();
+        this.currentFilters.selectedPoint = null;
     },
     
     // Update visualization with current filters

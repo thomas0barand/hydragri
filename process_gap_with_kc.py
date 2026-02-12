@@ -138,7 +138,7 @@ for idx, point_row in tqdm(gdf_joined.iterrows(), total=len(gdf_joined)):
 df_results = pd.DataFrame(results)
 
 # Save results
-output_path = Path("data/gap_results_3samples_with_kc.csv")
+output_path = Path("data/gap_results_with_kc.csv")
 df_results.to_csv(output_path, index=False)
 print(f"\n=== RESULTS SAVED ===")
 print(f"Output file: {output_path}")
@@ -158,19 +158,19 @@ summary = df_results.groupby('point').agg({
 }).round(2)
 print(summary)
 
-# Show when Gap occurs
-print("\n=== GAP ANALYSIS ===")
-for point in df_results['point'].unique():
-    point_df = df_results[df_results['point'] == point]
-    days_with_gap = (point_df['Gap'] > 0).sum()
-    total_gap = point_df['Gap'].sum()
-    kc_val = point_df['Kc'].iloc[0]
-    irrig_pct = point_df['pct_irrigated'].iloc[0]
-    if days_with_gap > 0:
-        first_gap = point_df[point_df['Gap'] > 0].iloc[0]['day']
-        print(f"{point}: Kc={kc_val:.3f}, Irrigation={irrig_pct:.1f}%, {days_with_gap} days with Gap, Total Gap={total_gap:.2f} mm, First Gap on {first_gap.date()}")
-    else:
-        print(f"{point}: Kc={kc_val:.3f}, Irrigation={irrig_pct:.1f}%, No water deficit in 2020")
+# # Show when Gap occurs
+# print("\n=== GAP ANALYSIS ===")
+# for point in df_results['point'].unique():
+#     point_df = df_results[df_results['point'] == point]
+#     days_with_gap = (point_df['Gap'] > 0).sum()
+#     total_gap = point_df['Gap'].sum()
+#     kc_val = point_df['Kc'].iloc[0]
+#     irrig_pct = point_df['pct_irrigated'].iloc[0]
+#     if days_with_gap > 0:
+#         first_gap = point_df[point_df['Gap'] > 0].iloc[0]['day']
+#         print(f"{point}: Kc={kc_val:.3f}, Irrigation={irrig_pct:.1f}%, {days_with_gap} days with Gap, Total Gap={total_gap:.2f} mm, First Gap on {first_gap.date()}")
+#     else:
+#         print(f"{point}: Kc={kc_val:.3f}, Irrigation={irrig_pct:.1f}%, No water deficit in 2020")
 
 # Display sample of results
 print("\n=== SAMPLE OUTPUT (first 20 rows) ===")

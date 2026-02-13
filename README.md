@@ -4,7 +4,7 @@ Interactive visualization of agricultural water balance (hydric gap) across Fran
 
 Built with D3.js, using meteorological, agricultural, and soil data to simulate daily water stock and deficit at ~8,000 SAFRAN grid points, then aggregated at multiple spatial scales for smooth map exploration.
 
-![Home view](outputs/home.png)
+![Complete view](outputs/complet_view.png)
 
 ---
 

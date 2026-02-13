@@ -3,3 +3,5 @@ data/*
 .DS_Store
 docs/*
 webapp/data/*
+
+!data/level_*.json

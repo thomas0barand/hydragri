@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HydraGri - Spatial Grid</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      padding: 10px 24px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    .info { font-size: 13px; color: #8899aa; }
+    #controls {
+      padding: 10px 24px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    #controls label { font-size: 13px; color: #8899aa; white-space: nowrap; }
+    #week-label { font-size: 14px; font-weight: 600; min-width: 110px; }
+    #scale-label { font-size: 12px; color: #e94560; min-width: 70px; }
+    #week-slider { flex: 1; accent-color: #e94560; cursor: pointer; }
+    #btn-play, #indicator-select {
+      background: #0f3460;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 4px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #btn-play:hover, #indicator-select:hover { background: #1a4a7a; }
+    #indicator-select option { background: #16213e; }
+    #map-area { flex: 1; position: relative; overflow: hidden; }
+    #chart { width: 100%; height: 100%; }
+    #zoom-btns {
+      position: absolute;
+      left: 20px;
+      top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 4;
+    }
+    #zoom-btns button {
+      width: 32px;
+      height: 32px;
+      background: rgba(22, 33, 62, 0.9);
+      border: 1px solid #0f3460;
+      color: #e0e0e0;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #zoom-btns button:first-child { border-radius: 6px 6px 0 0; }
+    #zoom-btns button:last-child { border-radius: 0 0 6px 6px; }
+    #zoom-btns button:hover { background: #0f3460; }
+
+    #legend {
+      position: absolute;
+      left: 20px;
+      top: 90px;
+      background: rgba(22, 33, 62, 0.9);
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 12px;
+      max-width: 140px;
+    }
+
+    /* Panel buttons */
+    .panel-btn {
+      background: none;
+      border: none;
+      color: #667;
+      font-size: 15px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 4px;
+    }
+    .panel-btn:hover { color: #e94560; }
+
+    /* Indicator description panel */
+    #indicator-desc {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      background: rgba(22, 33, 62, 0.9);
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      max-width: 340px;
+      line-height: 1.5;
+    }
+    #desc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    #desc-header .desc-title { font-weight: 600; font-size: 13px; flex: 1; }
+    #desc-header .desc-unit { color: #e94560; }
+    #desc-body { margin-top: 6px; }
+    #indicator-desc.collapsed #desc-body { display: none; }
+
+    #tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(22, 33, 62, 0.95);
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 12px;
+      display: none;
+      z-index: 10;
+    }
+    #tooltip .tt-commune { font-weight: 600; font-size: 13px; margin-bottom: 4px; color: #fff; }
+    #tooltip .label { color: #8899aa; }
+    #tooltip .value { color: #e0e0e0; font-weight: 600; }
+    #tooltip .tt-pos { color: #556; font-size: 11px; margin-top: 3px; }
+
+    /* Time series — right side panel */
+    #timeseries {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 620px;
+      background: rgba(22, 33, 62, 0.95);
+      border-left: 1px solid #0f3460;
+      display: none;
+      flex-direction: column;
+      z-index: 5;
+    }
+    #timeseries.visible { display: flex; }
+    #ts-header {
+      padding: 10px 16px;
+      font-size: 12px;
+      color: #8899aa;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-right: 32px;
+    }
+    #ts-header .ts-title { font-weight: 600; color: #e0e0e0; font-size: 13px; }
+    #ts-commune { color: #e94560; font-weight: 600; font-size: 13px; }
+    #ts-close {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      background: none;
+      border: none;
+      color: #667;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    #ts-close:hover { color: #e94560; }
+    #ts-chart { flex: 1; min-height: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>HydraGri</h1>
+    <div>
+      <span class="info" id="meta"></span>
+      <span id="scale-label"></span>
+    </div>
+  </header>
+  <div id="controls">
+    <select id="indicator-select">
+      <option value="stock">Stock</option>
+      <option value="gap">Gap</option>
+      <option value="P">Precipitation</option>
+      <option value="ETP">ETP</option>
+    </select>
+    <label></label>
+    <span id="week-label">—</span>
+    <input type="range" id="week-slider" min="0" max="0" value="0">
+    <button id="btn-play">&#9654; Play</button>
+  </div>
+  <div id="map-area">
+    <svg id="chart"></svg>
+    <div id="zoom-btns">
+      <button id="zoom-in">+</button>
+      <button id="zoom-out">−</button>
+    </div>
+    <div id="legend"></div>
+
+    <div id="indicator-desc" class="collapsed">
+      <div id="desc-header">
+        <span class="desc-title" id="desc-title-text"></span>
+        <button class="panel-btn" id="desc-toggle" title="Expand / Collapse">+</button>
+        <button class="panel-btn" id="desc-close" title="Close">&times;</button>
+      </div>
+      <div id="desc-body"></div>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <div id="timeseries">
+      <button id="ts-close">&times;</button>
+      <div id="ts-header">
+        <span class="ts-title" id="ts-title">Time Series</span>
+        <span id="ts-commune"></span>
+        <span id="ts-hint"></span>
+      </div>
+      <svg id="ts-chart"></svg>
+    </div>
+  </div>
+
+  <script>
+    // --- Week to Date conversion ---
+    function weekToDate(weekStr) {
+      const [y, w] = weekStr.split("-W").map(Number);
+      const jan4 = new Date(y, 0, 4);
+      const dayOfWeek = jan4.getDay() || 7;
+      const monday1 = new Date(jan4);
+      monday1.setDate(jan4.getDate() - dayOfWeek + 1);
+      const result = new Date(monday1);
+      result.setDate(monday1.getDate() + w * 7);
+      return result;
+    }
+
+    function formatWeekDate(weekStr) {
+      const d = weekToDate(weekStr);
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    }
+
+    const INDICATORS = {
+      stock: {
+        key: "stock", name: "Stock", unit: "mm",
+        desc: "Soil Water Stock: Water currently stored in the soil. Starts full after winter, depletes during the growing season as crops consume water and evapotranspiration exceeds rainfall.",
+        interpolator: d3.interpolateYlGnBu, reversed: false,
+      },
+      gap: {
+        key: "gap", name: "Hydric Gap", unit: "mm",
+        desc: "Crop water deficit — the shortfall between what the plant needs (ETP × Kc) and what the soil can provide. Appears when stock reaches zero. Represents the theoretical irrigation need.",
+        interpolator: d3.interpolateOrRd, reversed: false,
+      },
+      P: {
+        key: "P", name: "Precipitation", unit: "mm/week",
+        desc: "Weekly cumulative rainfall (liquid). Primary natural water input to the soil. Highly variable in space and time across France.",
+        // Custom piecewise scale: 0=light, ~3=blue, 10+=purple
+        customScale: true,
+        chartColor: "#4a90d9",
+      },
+      ETP: {
+        key: "ETP", name: "Evapotranspiration", unit: "mm/week",
+        desc: "Atmospheric water demand — combines solar radiation, temperature, wind and humidity. High ETP means the atmosphere \"pulls\" more water from the soil and plants.",
+        interpolator: d3.interpolateYlOrRd, reversed: false,
+      },
+    };
+
+    const SCALES = [
+      { level: "level_6", spacing: 640, km: 64 },
+      { level: "level_5", spacing: 410, km: 41 },
+      { level: "level_4", spacing: 290, km: 29 },
+      { level: "level_3", spacing: 210, km: 21 },
+      { level: "level_2", spacing: 150, km: 15 },
+      { level: "level_1", spacing: 110, km: 11 },
+      { level: "level_0", spacing:  80, km:  8 },
+    ];
+
+    const MIN_CELL_PX = 10;
+
+    const svg = d3.select("#chart");
+    const tooltip = d3.select("#tooltip");
+    const mapArea = document.getElementById("map-area");
+    let width, height;
+
+    function updateSize() {
+      width = mapArea.clientWidth;
+      height = mapArea.clientHeight;
+      svg.attr("width", width).attr("height", height);
+    }
+    updateSize();
+
+    const g = svg.append("g");
+
+    let baseScale = 1, xOff = 0, yOff = 0;
+    let xExtGlobal, yExtGlobal;
+
+    const scaleData = {};
+    const globalMax = { stock: 0, gap: 0, P: 0, ETP: 0 };
+
+    let currentZoom = d3.zoomIdentity;
+    let activeLevel = null;
+    let weekIdx = 0;
+    let activeIndicator = "stock";
+    let color;
+    let selectedCell = null;
+    let weeks = [];
+
+    const zoomBehavior = d3.zoom()
+      .scaleExtent([0.5, 40])
+      .on("zoom", onZoom);
+    svg.call(zoomBehavior);
+
+    // --- Zoom buttons ---
+    document.getElementById("zoom-in").addEventListener("click", () => {
+      svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.5);
+    });
+    document.getElementById("zoom-out").addEventListener("click", () => {
+      svg.transition().duration(300).call(zoomBehavior.scaleBy, 1 / 1.5);
+    });
+
+    // --- Description panel: toggle / close ---
+    const descEl = document.getElementById("indicator-desc");
+    const descToggle = document.getElementById("desc-toggle");
+    const descClose = document.getElementById("desc-close");
+
+    descToggle.addEventListener("click", () => {
+      const collapsed = descEl.classList.toggle("collapsed");
+      descToggle.textContent = collapsed ? "+" : "−";
+    });
+    descClose.addEventListener("click", () => {
+      descEl.style.display = "none";
+    });
+
+    // --- Time series close ---
+    document.getElementById("ts-close").addEventListener("click", () => {
+      document.getElementById("timeseries").classList.remove("visible");
+      selectedCell = null;
+    });
+
+    // Load all scales
+    Promise.all(
+      SCALES.map(s =>
+        d3.json(`data/${s.level}_weekly.json`)
+          .then(d => ({ ...s, data: d }))
+      )
+    ).then(results => {
+      for (const r of results) {
+        scaleData[r.level] = r.data;
+        for (const key of ["stock", "gap", "P", "ETP"]) {
+          for (const wk of r.data[key]) {
+            for (const v of wk) {
+              if (v > globalMax[key]) globalMax[key] = v;
+            }
+          }
+        }
+      }
+
+      updateColor();
+
+      const d0 = scaleData["level_0"];
+      weeks = d0.weeks;
+      xExtGlobal = d3.extent(d0.x);
+      yExtGlobal = d3.extent(d0.y);
+
+      const margin = 40;
+      const dataW = xExtGlobal[1] - xExtGlobal[0] + 80;
+      const dataH = yExtGlobal[1] - yExtGlobal[0] + 80;
+      baseScale = Math.min((width - margin * 2) / dataW, (height - margin * 2) / dataH);
+      xOff = margin + 125;
+      yOff = margin;
+
+      d3.select("#meta").text(`${d0.x.length} pts (8km) | ${weeks.length} weeks`);
+
+      const slider = document.getElementById("week-slider");
+      slider.max = weeks.length - 1;
+      slider.addEventListener("input", () => {
+        weekIdx = +slider.value;
+        render();
+        updateTimeseries();
+      });
+
+      let playing = false, timer = null;
+      const btn = document.getElementById("btn-play");
+      btn.addEventListener("click", () => {
+        playing = !playing;
+        btn.innerHTML = playing ? "&#9646;&#9646; Pause" : "&#9654; Play";
+        if (playing) {
+          timer = setInterval(() => {
+            weekIdx = (weekIdx + 1) % weeks.length;
+            slider.value = weekIdx;
+            render();
+            updateTimeseries();
+          }, 100);
+        } else clearInterval(timer);
+      });
+
+      document.getElementById("indicator-select").addEventListener("change", (e) => {
+        activeIndicator = e.target.value;
+        updateColor();
+        buildLegend();
+        updateDesc();
+        render();
+        drawTimeseries();
+      });
+
+      buildLegend();
+      updateDesc();
+      render();
+    });
+
+    function updateColor() {
+      const ind = INDICATORS[activeIndicator];
+      const mx = globalMax[activeIndicator];
+      if (ind.customScale) {
+        // Precipitation: piecewise — light → blue → purple
+        color = d3.scaleLinear()
+          .domain([0, 1, 3, 10, Math.max(mx, 20)])
+          .range(["#f0f0e8", "#a8d4e6", "#2b7bba", "#7b2d8e", "#4a0050"])
+          .clamp(true);
+      } else {
+        color = d3.scaleSequential(ind.interpolator).domain(ind.reversed ? [0, mx] : [0, mx]);
+      }
+    }
+
+    function updateDesc() {
+      const ind = INDICATORS[activeIndicator];
+      document.getElementById("desc-title-text").innerHTML =
+        `${ind.name} <span class="desc-unit">(${ind.unit})</span>`;
+      document.getElementById("desc-body").textContent = ind.desc;
+      // Show the panel (in case it was closed), keep collapse state
+      descEl.style.display = "";
+    }
+
+    function dataToScreen(dx, dy) {
+      return [
+        xOff + (dx - xExtGlobal[0]) * baseScale,
+        height - yOff - (dy - yExtGlobal[0]) * baseScale
+      ];
+    }
+
+    function pickScale(zoomK) {
+      let chosen = SCALES[0];
+      for (const s of SCALES) {
+        if (s.spacing * baseScale * zoomK >= MIN_CELL_PX) chosen = s;
+      }
+      return chosen;
+    }
+
+    function onZoom(e) {
+      currentZoom = e.transform;
+      const newScale = pickScale(currentZoom.k);
+      if (activeLevel !== newScale.level) {
+        activeLevel = newScale.level;
+        render();
+      } else {
+        g.attr("transform", currentZoom);
+      }
+    }
+
+    function render() {
+      const scale = pickScale(currentZoom.k);
+      activeLevel = scale.level;
+      const d = scaleData[scale.level];
+      if (!d) return;
+
+      const cellW = scale.spacing * baseScale;
+      const half = cellW / 2;
+      const wi = Math.min(weekIdx, d.weeks.length - 1);
+      const vals = d[activeIndicator][wi];
+      const communes = d.communes || [];
+
+      d3.select("#week-label").text(formatWeekDate(d.weeks[wi]));
+      d3.select("#scale-label").text(`${scale.km} km grid`);
+
+      const rects = g.selectAll("rect")
+        .data(d3.range(d.x.length), i => `${scale.level}-${i}`);
+
+      rects.exit().remove();
+
+      const enter = rects.enter().append("rect")
+        .attr("stroke", "rgba(0,0,0,0.15)")
+        .attr("stroke-width", 0.5);
+
+      const all = enter.merge(rects);
+
+      all
+        .attr("x", i => { const [sx] = dataToScreen(d.x[i], d.y[i]); return sx - half; })
+        .attr("y", i => { const [, sy] = dataToScreen(d.x[i], d.y[i]); return sy - half; })
+        .attr("width", cellW)
+        .attr("height", cellW)
+        .attr("fill", i => color(vals[i]));
+
+      all
+        .on("mouseover", (e, i) => {
+          const w = Math.min(weekIdx, d.weeks.length - 1);
+          const name = communes[i] || "";
+          tooltip.style("display", "block").html(
+            `${name ? `<div class="tt-commune">${name}</div>` : ""}` +
+            `<span class="label">Stock:</span> <span class="value">${d.stock[w][i].toFixed(1)} mm</span><br>` +
+            `<span class="label">Gap:</span> <span class="value">${d.gap[w][i].toFixed(2)} mm</span><br>` +
+            `<span class="label">P:</span> <span class="value">${d.P[w][i].toFixed(2)} mm</span> &nbsp;` +
+            `<span class="label">ETP:</span> <span class="value">${d.ETP[w][i].toFixed(2)} mm</span>` +
+            `<div class="tt-pos">${d.x[i]}, ${d.y[i]}</div>`
+          );
+        })
+        .on("mousemove", (e) => {
+          tooltip.style("left", (e.pageX + 10) + "px").style("top", (e.pageY - 70) + "px");
+        })
+        .on("mouseout", () => tooltip.style("display", "none"))
+        .on("click", (e, i) => {
+          e.stopPropagation();
+          selectedCell = { level: scale.level, index: i };
+          document.getElementById("timeseries").classList.add("visible");
+          drawTimeseries();
+        });
+
+      g.attr("transform", currentZoom);
+    }
+
+    // ---- TIME SERIES ----
+    const tsMargin = { top: 12, right: 20, bottom: 60, left: 46 };
+
+    function drawTimeseries() {
+      const tsSvg = d3.select("#ts-chart");
+      tsSvg.selectAll("*").remove();
+
+      if (!selectedCell) return;
+
+      const d = scaleData[selectedCell.level];
+      const idx = selectedCell.index;
+      const ind = INDICATORS[activeIndicator];
+      const communes = d.communes || [];
+
+      const values = d[activeIndicator].map(wk => wk[idx]);
+      const dates = d.weeks.map(weekToDate);
+
+      const name = communes[idx] || "";
+      d3.select("#ts-commune").text(name);
+      d3.select("#ts-hint").text(name ? `(${d.x[idx]}, ${d.y[idx]})` : `Cell (${d.x[idx]}, ${d.y[idx]})`);
+      d3.select("#ts-title").text(`${ind.name} (${ind.unit})`);
+
+      const tsEl = document.getElementById("ts-chart");
+      const tsW = tsEl.clientWidth;
+      const tsH = tsEl.clientHeight;
+      tsSvg.attr("width", tsW).attr("height", tsH);
+
+      const xScale = d3.scaleTime()
+        .domain(d3.extent(dates))
+        .range([tsMargin.left, tsW - tsMargin.right]);
+
+      const yScale = d3.scaleLinear()
+        .domain([0, d3.max(values) * 1.1])
+        .nice()
+        .range([tsH - tsMargin.bottom, tsMargin.top]);
+
+      // X axis — month abbreviations
+      const monthAxis = tsSvg.append("g")
+        .attr("transform", `translate(0,${tsH - tsMargin.bottom})`)
+        .call(d3.axisBottom(xScale)
+          .ticks(d3.timeMonth.every(2))
+          .tickFormat(d3.timeFormat("%b"))
+          .tickSize(5));
+
+      monthAxis.selectAll("text")
+        .attr("fill", "#8899aa").attr("font-size", 10)
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-45)")
+        .attr("dx", "-6px").attr("dy", "2px");
+      monthAxis.selectAll(".domain, .tick line").attr("stroke", "#2a3a5e");
+
+      // Year labels below months
+      const yearsShown = new Set();
+      xScale.ticks(d3.timeMonth.every(2)).forEach(dt => {
+        const yr = dt.getFullYear();
+        if (!yearsShown.has(yr)) {
+          yearsShown.add(yr);
+          const jan1 = new Date(yr, 0, 1);
+          const xPos = xScale(jan1 < xScale.domain()[0] ? dt : jan1);
+          tsSvg.append("text")
+            .attr("x", xPos).attr("y", tsH - tsMargin.bottom + 38)
+            .attr("fill", "#8899aa").attr("font-size", 11).attr("font-weight", 600)
+            .attr("text-anchor", "start")
+            .text(yr);
+        }
+      });
+
+      // Y axis
+      const yAxis = tsSvg.append("g")
+        .attr("transform", `translate(${tsMargin.left},0)`)
+        .call(d3.axisLeft(yScale).ticks(4));
+      yAxis.selectAll("text").attr("fill", "#8899aa").attr("font-size", 10);
+      yAxis.selectAll(".domain, .tick line").attr("stroke", "#2a3a5e");
+
+      // Area fill
+      const area = d3.area()
+        .x((_, i) => xScale(dates[i]))
+        .y0(yScale(0))
+        .y1(v => yScale(v))
+        .curve(d3.curveMonotoneX);
+
+      tsSvg.append("path")
+        .datum(values)
+        .attr("d", area)
+        .attr("fill", ind.chartColor || ind.interpolator(0.6))
+        .attr("opacity", 0.2);
+
+      // Line
+      const line = d3.line()
+        .x((_, i) => xScale(dates[i]))
+        .y(v => yScale(v))
+        .curve(d3.curveMonotoneX);
+
+      tsSvg.append("path")
+        .datum(values)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", ind.chartColor || ind.interpolator(0.7))
+        .attr("stroke-width", 2);
+
+      // Current week marker
+      const wi = Math.min(weekIdx, dates.length - 1);
+      tsSvg.append("line")
+        .attr("class", "ts-marker")
+        .attr("x1", xScale(dates[wi])).attr("x2", xScale(dates[wi]))
+        .attr("y1", tsMargin.top).attr("y2", tsH - tsMargin.bottom)
+        .attr("stroke", "#e94560").attr("stroke-width", 1.5)
+        .attr("stroke-dasharray", "4,3");
+
+      tsSvg.append("circle")
+        .attr("class", "ts-dot")
+        .attr("cx", xScale(dates[wi])).attr("cy", yScale(values[wi]))
+        .attr("r", 4)
+        .attr("fill", "#e94560");
+
+      tsSvg.append("text")
+        .attr("class", "ts-val")
+        .attr("x", xScale(dates[wi]) + 8).attr("y", yScale(values[wi]) - 8)
+        .attr("fill", "#e94560").attr("font-size", 11).attr("font-weight", 600)
+        .text(values[wi].toFixed(1));
+    }
+
+    function updateTimeseries() {
+      if (!selectedCell) return;
+
+      const d = scaleData[selectedCell.level];
+      const idx = selectedCell.index;
+      const values = d[activeIndicator].map(wk => wk[idx]);
+      const dates = d.weeks.map(weekToDate);
+
+      const tsEl = document.getElementById("ts-chart");
+      const tsW = tsEl.clientWidth;
+      const tsH = tsEl.clientHeight;
+
+      const xScale = d3.scaleTime()
+        .domain(d3.extent(dates))
+        .range([tsMargin.left, tsW - tsMargin.right]);
+
+      const yScale = d3.scaleLinear()
+        .domain([0, d3.max(values) * 1.1])
+        .nice()
+        .range([tsH - tsMargin.bottom, tsMargin.top]);
+
+      const wi = Math.min(weekIdx, dates.length - 1);
+
+      d3.select("#ts-chart .ts-marker")
+        .attr("x1", xScale(dates[wi])).attr("x2", xScale(dates[wi]));
+
+      d3.select("#ts-chart .ts-dot")
+        .attr("cx", xScale(dates[wi])).attr("cy", yScale(values[wi]));
+
+      d3.select("#ts-chart .ts-val")
+        .attr("x", xScale(dates[wi]) + 8).attr("y", yScale(values[wi]) - 8)
+        .text(values[wi].toFixed(1));
+    }
+
+    // ---- LEGEND ----
+    function buildLegend() {
+      d3.select("#legend").html("");
+      const ind = INDICATORS[activeIndicator];
+      const mx = globalMax[activeIndicator];
+
+      d3.select("#legend").append("div")
+        .style("font-size", "12px")
+        .style("font-weight", "600")
+        .style("margin-bottom", "14px")
+        .text(`${ind.name} (${ind.unit})`);
+
+      const legendW = 20, legendH = 200, top = 10;
+      const legendSvg = d3.select("#legend")
+        .append("svg").attr("width", 80).attr("height", legendH + top + 8);
+
+      const defs = legendSvg.append("defs");
+      const grad = defs.append("linearGradient")
+        .attr("id", "lg")
+        .attr("x1", "0%").attr("y1", "0%").attr("x2", "0%").attr("y2", "100%");
+
+      // For custom (precipitation) scale, use log-like mapping so
+      // low values get more visual space in the bar
+      const logMap = ind.customScale;
+      const mxBar = logMap ? Math.max(mx, 20) : mx;
+      // val → position [0..1] (0=top=max, 1=bottom=0)
+      function valToPos(v) {
+        if (!logMap) return mx > 0 ? 1 - v / mx : 0;
+        // log1p mapping: spread low values
+        return 1 - Math.log1p(v) / Math.log1p(mxBar);
+      }
+
+      const stops = 30;
+      for (let i = 0; i <= stops; i++) {
+        const pos = i / stops; // 0=top, 1=bottom
+        // Invert: pos → value via inverse log1p
+        const val = logMap
+          ? Math.expm1((1 - pos) * Math.log1p(mxBar))
+          : mxBar * (1 - pos);
+        grad.append("stop")
+          .attr("offset", `${pos * 100}%`)
+          .attr("stop-color", color(val));
+      }
+
+      legendSvg.append("rect")
+        .attr("x", 0).attr("y", top)
+        .attr("width", legendW).attr("height", legendH)
+        .attr("fill", "url(#lg)").attr("rx", 3);
+
+      // Tick labels
+      const ticks = logMap
+        ? [Math.max(mx, 20), 10, 3, 1, 0]
+        : [mx, mx / 2, 0];
+
+      ticks.forEach(v => {
+        const t = valToPos(v);
+        legendSvg.append("text")
+          .attr("x", legendW + 6).attr("y", top + 4 + t * legendH)
+          .attr("fill", "#aaa").attr("font-size", 11)
+          .text(v.toFixed(0));
+      });
+    }
+  </script>
+</body>
+</html>

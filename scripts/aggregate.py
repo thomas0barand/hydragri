@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
+from scipy.spatial import cKDTree
 
 
 # ============================================================================
@@ -121,6 +122,43 @@ def aggregate_temporal(input_file, output_file=None, chunksize=500000):
 
 
 # ============================================================================
+# REGION LOOKUP: (LAMBX, LAMBY) -> region (nearest SAFRAN point with region)
+# ============================================================================
+
+def load_point_region_lookup(data_dir=None):
+    """
+    Load (LAMBX, LAMBY) -> code_region, nom_region from safran_commune_kc.csv.
+    Returns (tree, df_lookup) or (None, None) if file missing or no region columns.
+    """
+    if data_dir is None:
+        data_dir = Path(__file__).resolve().parent.parent / "data" / "agreste"
+    path = Path(data_dir) / "safran_commune_kc.csv"
+    if not path.exists():
+        return None, None
+    df = pd.read_csv(path, dtype={"LAMBX": "float64", "LAMBY": "float64"})
+    if "nom_region" not in df.columns or "code_region" not in df.columns:
+        return None, None
+    df = df[["LAMBX", "LAMBY", "code_region", "nom_region"]].dropna(subset=["nom_region"]).drop_duplicates(subset=["LAMBX", "LAMBY"])
+    if len(df) == 0:
+        return None, None
+    tree = cKDTree(df[["LAMBX", "LAMBY"]].values)
+    return tree, df
+
+
+def assign_region_to_grid(aggregated, tree, df_lookup):
+    """Add code_region and nom_region to aggregated by nearest SAFRAN point."""
+    if tree is None or df_lookup is None:
+        return aggregated
+    cells = aggregated[["LAMBX", "LAMBY"]].drop_duplicates()
+    _, idx = tree.query(cells.values, k=1)
+    cells = cells.copy()
+    cells["code_region"] = df_lookup.iloc[idx]["code_region"].values
+    cells["nom_region"] = df_lookup.iloc[idx]["nom_region"].values
+    aggregated = aggregated.merge(cells, on=["LAMBX", "LAMBY"], how="left")
+    return aggregated
+
+
+# ============================================================================
 # SPATIAL AGGREGATION: Grid-based multi-scale
 # ============================================================================
 
@@ -147,7 +185,14 @@ def aggregate_spatial(input_file, output_dir=None, scale_level=None,
         output_dir = Path(output_dir)
     
     output_dir.mkdir(exist_ok=True, parents=True)
-    
+
+    # Load point -> region lookup (SAFRAN points with region from nearest commune)
+    region_tree, region_lookup = load_point_region_lookup()
+    if region_tree is not None:
+        print("\n  Region lookup loaded: will add code_region, nom_region to each grid cell")
+    else:
+        print("\n  No region lookup: run link_commune_safran.py to add region to safran_commune_kc.csv")
+
     print(f"\n{'='*70}")
     print("SPATIAL AGGREGATION: Multi-scale grid generation")
     print(f"{'='*70}")
@@ -263,18 +308,24 @@ def aggregate_spatial(input_file, output_dir=None, scale_level=None,
         aggregated = aggregated.rename(columns={
             'point': 'point_count'
         })
-        
+
+        # Assign region to each grid cell (nearest SAFRAN point with region)
+        aggregated = assign_region_to_grid(aggregated, region_tree, region_lookup)
+
         # Reorder columns
+        base_cols = ['grid_cell', 'LAMBX', 'LAMBY']
         if has_week:
-            aggregated = aggregated[['grid_cell', 'LAMBX', 'LAMBY', 'week', 
-                                    'P', 'ETP', 'Stock', 'Gap', 'point_count']]
+            base_cols += ['week']
         else:
-            aggregated = aggregated[['grid_cell', 'LAMBX', 'LAMBY', 'day', 
-                                    'P', 'ETP', 'Stock', 'Gap', 'point_count']]
-        
+            base_cols += ['day']
+        base_cols += ['P', 'ETP', 'Stock', 'Gap', 'point_count']
+        if 'code_region' in aggregated.columns:
+            base_cols += ['code_region', 'nom_region']
+        aggregated = aggregated[[c for c in base_cols if c in aggregated.columns]]
+
         # Sort
         aggregated = aggregated.sort_values(['grid_cell', time_col]).reset_index(drop=True)
-        
+
         # Save to file
         output_file = output_dir / f"{input_path.stem}_{level}_{scale}km.csv"
         aggregated.to_csv(output_file, index=False)
@@ -418,7 +469,7 @@ def main():
     """Command line interface."""
     if len(sys.argv) < 2:
         print("""
-Usage: python aggregate_multi_scale.py <command> <input_file> [options]
+Usage: python aggregate.py <command> <input_file> [options]
 
 Commands:
   temporal     - Aggregate daily data to weekly
@@ -427,13 +478,13 @@ Commands:
 
 Examples:
   # Temporal only
-  python aggregate_multi_scale.py temporal gap_results.csv
+  python aggregate.py temporal gap_results.csv
   
   # Spatial only (input should be weekly data)
-  python aggregate_multi_scale.py spatial gap_results_weekly.csv
+  python aggregate.py spatial gap_results_weekly.csv
   
   # Both (complete workflow)
-  python aggregate_multi_scale.py both gap_results.csv
+  python aggregate.py both gap_results.csv
   
   # Specify output directory
   python aggregate.py both data/gap_results_with_kc.csv data/

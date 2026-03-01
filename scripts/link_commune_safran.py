@@ -16,10 +16,11 @@ KC_VALUES = {
     'vineyards': 0.70      # Vignes
 }
 
-# Load commune geographic data - only needed columns
+# Load commune geographic data - only needed columns (incl. region/departement)
 print("Loading commune data...")
 commune_geo = pd.read_csv('data/agreste/20230823-communes-departement-region.csv',
-                          usecols=['code_commune_INSEE', 'latitude', 'longitude', 'nom_commune'])
+                          usecols=['code_commune_INSEE', 'latitude', 'longitude', 'nom_commune',
+                                   'code_region', 'nom_region', 'code_departement', 'nom_departement'])
 print(f"Loaded {len(commune_geo)} communes")
 
 # Load agreste agricultural data - only needed columns to reduce memory
@@ -41,7 +42,8 @@ agreste['code_commune'] = agreste['Code'].astype(str).str.zfill(5)
 # Merge with commune coordinates
 print("\nMerging agricultural data with commune coordinates...")
 agreste_geo = agreste.merge(
-    commune_geo[['code_commune_INSEE', 'latitude', 'longitude', 'nom_commune']],
+    commune_geo[['code_commune_INSEE', 'latitude', 'longitude', 'nom_commune',
+                 'code_region', 'nom_region', 'code_departement', 'nom_departement']],
     left_on='code_commune',
     right_on='code_commune_INSEE',
     how='left'
@@ -167,7 +169,8 @@ for idx, safran in safran_df.iterrows():
     print(f"  Irrigated surface: {weighted_irrigated:.1f}%")
     print(f"  Calculated average Kc: {avg_kc:.3f}")
     
-    # Quantize data to reduce file size
+    # Closest commune for region/departement
+    closest = nearby_communes.loc[nearby_communes['distance_km'].idxmin()]
     safran_commune_links.append({
         'LAMBX': safran['LAMBX'],
         'LAMBY': safran['LAMBY'],
@@ -180,7 +183,11 @@ for idx, safran in safran_df.iterrows():
         'pct_prairies': round(weighted_prairies, 1),
         'pct_vineyards': round(weighted_vineyards, 1),
         'pct_irrigated': round(weighted_irrigated, 1),
-        'avg_kc': round(avg_kc, 3)
+        'avg_kc': round(avg_kc, 3),
+        'code_region': closest.get('code_region', ''),
+        'nom_region': closest.get('nom_region', ''),
+        'code_departement': closest.get('code_departement', ''),
+        'nom_departement': closest.get('nom_departement', ''),
     })
 
 # Create DataFrame with results

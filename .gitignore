@@ -6,3 +6,6 @@ webapp/data/*
 
 !data/level_*.json
 !data/spatial_scales/level_*.json
+
+.vscode/
+.cursor/

@@ -18,7 +18,7 @@ RPG_COLUMNS = [
 
 # SIM quotidiennes: stations (LAMBX,LAMBY), DATE, PRENEI, PRELIQ, EVAP, ETP
 SIM_DIR = "data/sim"
-SIM_INPUT = "data/sim/QUOT_SIM2_previous-2020-202512.csv"
+SIM_INPUT = "data/sim/QUOT_SIM2_previous-2020-202601.csv"
 SIM_OUTPUT = "data/sim/QUOT_SIM2_reduced.csv"
 SIM_COLUMNS = ["LAMBX", "LAMBY", "DATE", "PRENEI", "PRELIQ", "EVAP", "ETP"]
 SIM_N_STATIONS = 10
@@ -68,10 +68,11 @@ if __name__ == "__main__":
 
     df_input = pd.read_csv(SIM_INPUT, sep=";", usecols=SIM_COLUMNS)
     print(f"# stations input: {len(df_input[['LAMBX', 'LAMBY']].drop_duplicates())}")
+
+
+    process_sim(n_stations=False)
+    print(f"{SIM_INPUT}: {os.path.getsize(SIM_INPUT) / 1e6:.1f} MB")
+    print(f"{SIM_OUTPUT}: {os.path.getsize(SIM_OUTPUT) / 1e6:.1f} MB")
+
     df_output = pd.read_csv(SIM_OUTPUT)
     print(f"# stations output: {len(df_output[['LAMBX', 'LAMBY']].drop_duplicates())}")
-
-
-    # process_sim(n_stations=False)
-    # print(f"{SIM_INPUT}: {os.path.getsize(SIM_INPUT) / 1e6:.1f} MB")
-    # print(f"{SIM_OUTPUT}: {os.path.getsize(SIM_OUTPUT) / 1e6:.1f} MB")

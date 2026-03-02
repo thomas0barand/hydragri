@@ -25,18 +25,27 @@
     }
     header h1 { font-size: 18px; font-weight: 600; }
     .info { font-size: 13px; color: #8899aa; }
-    #controls {
+    #timeline-strip {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      grid-template-rows: auto auto;
+      gap: 0 14px;
       padding: 10px 24px;
       background: #16213e;
       border-bottom: 1px solid #0f3460;
+      align-items: center;
+    }
+    #timeline-strip:not(.ts-visible) .ts-cell { display: none; }
+    #timeseries-row, #controls-row { display: contents; }
+    #controls-left {
       display: flex;
       align-items: center;
       gap: 14px;
     }
-    #controls label { font-size: 13px; color: #8899aa; white-space: nowrap; }
-    #week-label { font-size: 14px; font-weight: 600; min-width: 110px; }
+    #controls-left label { font-size: 13px; color: #8899aa; white-space: nowrap; }
+    #week-label { font-size: 11px; font-weight: 600; min-width: 82px; }
     #scale-label { font-size: 12px; color: #e94560; min-width: 70px; }
-    #week-slider { flex: 1; accent-color: #e94560; cursor: pointer; }
+    #week-slider { width: 100%; min-width: 0; accent-color: #e94560; cursor: pointer; }
     #btn-play, #indicator-select {
       background: #0f3460;
       border: 1px solid #0f3460;
@@ -48,6 +57,8 @@
     }
     #btn-play:hover, #indicator-select:hover { background: #1a4a7a; }
     #indicator-select option { background: #16213e; }
+    .mean-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8899aa; cursor: pointer; }
+    .mean-toggle input { accent-color: #e94560; cursor: pointer; }
     #map-area { flex: 1; position: relative; overflow: hidden; }
     #chart { width: 100%; height: 100%; }
     #zoom-btns {
@@ -176,45 +187,29 @@
     #about-close { float: right; background: none; border: none; color: #667; font-size: 20px; cursor: pointer; }
     #about-close:hover { color: #e94560; }
 
-    /* Time series — compact bottom panel */
-    #timeseries {
-      position: absolute;
-      right: 0;
-      left: 0;
-      bottom: 0;
-      height: 180px;
-      background: rgba(15, 22, 48, 0.96);
-      border-top: 1px solid #0f3460;
-      display: none;
-      flex-direction: column;
-      z-index: 5;
-    }
-    #timeseries.visible { display: flex; }
-    #ts-header {
-      padding: 5px 14px 2px;
+    /* Time series row — same grid columns as slider row for alignment */
+    .ts-cell#ts-header {
+      padding: 5px 0 2px;
       font-size: 11px;
       color: #8899aa;
       display: flex;
       align-items: center;
       gap: 8px;
-      padding-right: 30px;
-      flex-shrink: 0;
     }
     #ts-header .ts-title { font-weight: 600; color: #c0cce0; font-size: 11px; }
     #ts-commune { color: #e94560; font-weight: 600; font-size: 11px; }
-    #ts-close {
-      position: absolute;
-      top: 4px;
-      right: 8px;
+    #ts-chart-wrap { height: 180px; min-height: 0; min-width: 0; background: rgba(15, 22, 48, 0.5); }
+    #ts-chart { width: 100%; height: 100%; display: block; }
+    .ts-cell#ts-close {
       background: none;
       border: none;
       color: #667;
       font-size: 16px;
       cursor: pointer;
       line-height: 1;
+      padding: 2px 4px;
     }
-    #ts-close:hover { color: #e94560; }
-    #ts-chart { flex: 1; min-height: 0; }
+    .ts-cell#ts-close:hover { color: #e94560; }
   </style>
 </head>
 <body>
@@ -289,17 +284,31 @@
       <p>Pour toute question : <a href="mailto:th.barand@gmail.com">th.barand@gmail.com</a></p>
     </div>
   </div>
-  <div id="controls">
-    <select id="indicator-select">
-      <option value="stock">Stock</option>
-      <option value="gap">Gap</option>
-      <option value="P">Precipitation</option>
-      <option value="ETP">ETP</option>
-    </select>
-    <label></label>
-    <span id="week-label">—</span>
-    <input type="range" id="week-slider" min="0" max="0" value="0">
-    <button id="btn-play">&#9654; Play</button>
+  <div id="timeline-strip">
+    <div id="timeseries-row" style="display: contents">
+      <div id="ts-header" class="ts-cell">
+        <span class="ts-title" id="ts-title">Time Series</span>
+        <span id="ts-commune"></span>
+      </div>
+      <div id="ts-chart-wrap" class="ts-cell">
+        <svg id="ts-chart"></svg>
+      </div>
+      <button type="button" id="ts-close" class="ts-cell" title="Fermer">&times;</button>
+    </div>
+    <div id="controls-row" style="display: contents">
+      <div id="controls-left">
+        <select id="indicator-select">
+          <option value="stock">Stock</option>
+          <option value="gap">Gap</option>
+          <option value="P">Precipitation</option>
+          <option value="ETP">ETP</option>
+        </select>
+        <label class="mean-toggle"><input type="checkbox" id="mean-checkbox"> Moyenne</label>
+        <span id="week-label">—</span>
+      </div>
+      <input type="range" id="week-slider" min="0" max="0" value="0">
+      <button id="btn-play">&#9654; Play</button>
+    </div>
   </div>
   <div id="map-area">
     <svg id="chart"></svg>
@@ -312,15 +321,6 @@
     <button type="button" id="about-btn">À propos</button>
 
     <div id="tooltip"></div>
-
-    <div id="timeseries">
-      <button id="ts-close">&times;</button>
-      <div id="ts-header">
-        <span class="ts-title" id="ts-title">Time Series</span>
-        <span id="ts-commune"></span>
-      </div>
-      <svg id="ts-chart"></svg>
-    </div>
   </div>
 
   <script>
@@ -363,7 +363,7 @@
         chartColor: "#4a90d9",
       },
       ETP: {
-        key: "ETP", name: "Évapotranspiration potentielle", unit: "mm/semaine",
+        key: "ETP", name: "Évapotranspiration", unit: "mm/semaine",
         desc: "Donnée SIM (modèle Météo-France), pas calculée dans notre chaîne. En hebdo : moyenne des ETP journalières.",
         formula: "ETP = donnée SIM (colonne ETP) ; ETP semaine = moyenne des ETP journalières",
         interpolator: d3.interpolateYlOrRd, reversed: false,
@@ -415,6 +415,7 @@
     let activeLevel = null;
     let weekIdx = 0;
     let activeIndicator = "stock";
+    let useMeanMode = false;
     let color;
     let selectedCell = null;
     let weeks = [];
@@ -471,7 +472,7 @@
 
     // --- Time series close ---
     document.getElementById("ts-close").addEventListener("click", () => {
-      document.getElementById("timeseries").classList.remove("visible");
+      document.getElementById("timeline-strip").classList.remove("ts-visible");
       selectedCell = null;
     });
 
@@ -540,6 +541,13 @@
         drawTimeseries();
       });
 
+      document.getElementById("mean-checkbox").addEventListener("change", (e) => {
+        useMeanMode = e.target.checked;
+        updateColor();
+        render();
+        buildLegend();
+      });
+
       buildLegend();
       render();
     });
@@ -547,9 +555,21 @@
 
     function updateColor() {
       const ind = INDICATORS[activeIndicator];
-      const mx = globalMax[activeIndicator];
+      let mx = globalMax[activeIndicator];
+      // Gap en mode moyenne : échelle adaptée au min/max des moyennes (échelle réduite)
+      if (useMeanMode && activeIndicator === "gap" && scaleData.level_0) {
+        const scale = pickScale(currentZoom.k);
+        const d = scaleData[scale.level];
+        if (d) {
+          const n = d.weeks.length;
+          const means = d3.range(d.x.length).map(i => d3.sum(d.gap.map(wk => wk[i])) / n);
+          const minM = d3.min(means);
+          const maxM = d3.max(means);
+          color = d3.scaleSequential(ind.interpolator).domain([minM, maxM]);
+          return;
+        }
+      }
       if (ind.customScale) {
-        // Precipitation: piecewise — light → blue → purple
         color = d3.scaleLinear()
           .domain([0, 1, 3, 10, Math.max(mx, 20)])
           .range(["#f0f0e8", "#a8d4e6", "#2b7bba", "#7b2d8e", "#4a0050"])
@@ -591,13 +611,22 @@
       const d = scaleData[scale.level];
       if (!d) return;
 
+      if (useMeanMode && activeIndicator === "gap") updateColor();
+
       const cellW = scale.spacing * baseScale;
       const half = cellW / 2;
       const wi = Math.min(weekIdx, d.weeks.length - 1);
-      const vals = d[activeIndicator][wi];
+      const nWeeks = d.weeks.length;
+      const vals = useMeanMode
+        ? d3.range(d.x.length).map(i => {
+            let sum = 0;
+            for (let w = 0; w < nWeeks; w++) sum += d[activeIndicator][w][i];
+            return sum / nWeeks;
+          })
+        : d[activeIndicator][wi];
       const communes = d.communes || [];
 
-      d3.select("#week-label").text(formatWeekDate(d.weeks[wi]));
+      d3.select("#week-label").text(useMeanMode ? "Moyenne 2020–2025" : formatWeekDate(d.weeks[wi]));
       d3.select("#scale-label").text(`${scale.km} km grid`);
 
       const rects = g.selectAll("rect")
@@ -623,13 +652,22 @@
           const w = Math.min(weekIdx, d.weeks.length - 1);
           const name = communes[i] || "";
           const region = (d.nom_region || [])[i] || "";
+          let sStock = d.stock[w][i].toFixed(1), sGap = d.gap[w][i].toFixed(2), sP = d.P[w][i].toFixed(2), sETP = d.ETP[w][i].toFixed(2);
+          if (useMeanMode) {
+            const n = d.weeks.length;
+            sStock = (d3.sum(d.stock.map(wk => wk[i])) / n).toFixed(1);
+            sGap = (d3.sum(d.gap.map(wk => wk[i])) / n).toFixed(2);
+            sP = (d3.sum(d.P.map(wk => wk[i])) / n).toFixed(2);
+            sETP = (d3.sum(d.ETP.map(wk => wk[i])) / n).toFixed(2);
+          }
           tooltip.style("display", "block").html(
             `${name ? `<div class="tt-commune">${name}</div>` : ""}` +
             `${region ? `<div style="font-size:11px;color:#8ab4cc;margin-bottom:3px;">${region}</div>` : ""}` +
-            `<span class="label">Stock:</span> <span class="value">${d.stock[w][i].toFixed(1)} mm</span><br>` +
-            `<span class="label">Gap:</span> <span class="value">${d.gap[w][i].toFixed(2)} mm</span><br>` +
-            `<span class="label">P:</span> <span class="value">${d.P[w][i].toFixed(2)} mm</span> &nbsp;` +
-            `<span class="label">ETP:</span> <span class="value">${d.ETP[w][i].toFixed(2)} mm</span>` +
+            (useMeanMode ? `<span class="label">Moyenne période</span><br>` : "") +
+            `<span class="label">Stock:</span> <span class="value">${sStock} mm</span><br>` +
+            `<span class="label">Gap:</span> <span class="value">${sGap} mm</span><br>` +
+            `<span class="label">P:</span> <span class="value">${sP} mm</span> &nbsp;` +
+            `<span class="label">ETP:</span> <span class="value">${sETP} mm</span>` +
             `<div class="tt-pos">${d.x[i]}, ${d.y[i]}</div>`
           );
         })
@@ -640,8 +678,8 @@
         .on("click", (e, i) => {
           e.stopPropagation();
           selectedCell = { level: scale.level, index: i };
-          document.getElementById("timeseries").classList.add("visible");
-          drawTimeseries();
+          document.getElementById("timeline-strip").classList.add("ts-visible");
+          requestAnimationFrame(() => drawTimeseries());
         });
 
       // ---- REGION BOUNDARIES ----
@@ -764,9 +802,9 @@
       d3.select("#ts-commune").text(name);
       d3.select("#ts-title").text(`${ind.name} (${ind.unit})`);
 
-      const tsEl = document.getElementById("ts-chart");
-      const tsW = tsEl.clientWidth;
-      const tsH = tsEl.clientHeight;
+      const tsWrap = document.getElementById("ts-chart-wrap");
+      const tsW = tsWrap.clientWidth;
+      const tsH = tsWrap.clientHeight;
       tsSvg.attr("width", tsW).attr("height", tsH);
 
       const xScale = d3.scaleTime()
@@ -856,9 +894,9 @@
       const values = d[activeIndicator].map(wk => wk[idx]);
       const dates = d.weeks.map(weekToDate);
 
-      const tsEl = document.getElementById("ts-chart");
-      const tsW = tsEl.clientWidth;
-      const tsH = tsEl.clientHeight;
+      const tsWrap = document.getElementById("ts-chart-wrap");
+      const tsW = tsWrap.clientWidth;
+      const tsH = tsWrap.clientHeight;
 
       const xScale = d3.scaleTime()
         .domain(d3.extent(dates))
@@ -886,13 +924,24 @@
     function buildLegend() {
       d3.select("#legend").html("");
       const ind = INDICATORS[activeIndicator];
-      const mx = globalMax[activeIndicator];
+      let mn = 0, mx = globalMax[activeIndicator];
+      const gapMeanMode = useMeanMode && activeIndicator === "gap" && scaleData.level_0;
+      if (gapMeanMode) {
+        const scale = pickScale(currentZoom.k);
+        const d = scaleData[scale.level];
+        if (d) {
+          const n = d.weeks.length;
+          const means = d3.range(d.x.length).map(i => d3.sum(d.gap.map(wk => wk[i])) / n);
+          mn = d3.min(means);
+          mx = d3.max(means);
+        }
+      }
 
       d3.select("#legend").append("div")
         .style("font-size", "12px")
         .style("font-weight", "600")
         .style("margin-bottom", "14px")
-        .text(`${ind.name} (${ind.unit})`);
+        .text(`${ind.name} (${ind.unit})${gapMeanMode ? " — moyenne" : ""}`);
 
       const legendW = 20, legendH = 200, top = 10;
       const legendSvg = d3.select("#legend")
@@ -903,24 +952,21 @@
         .attr("id", "lg")
         .attr("x1", "0%").attr("y1", "0%").attr("x2", "0%").attr("y2", "100%");
 
-      // For custom (precipitation) scale, use log-like mapping so
-      // low values get more visual space in the bar
       const logMap = ind.customScale;
       const mxBar = logMap ? Math.max(mx, 20) : mx;
-      // val → position [0..1] (0=top=max, 1=bottom=0)
+      const range = mx - mn;
       function valToPos(v) {
+        if (gapMeanMode && range > 0) return 1 - (v - mn) / range;
         if (!logMap) return mx > 0 ? 1 - v / mx : 0;
-        // log1p mapping: spread low values
         return 1 - Math.log1p(v) / Math.log1p(mxBar);
       }
 
       const stops = 30;
       for (let i = 0; i <= stops; i++) {
-        const pos = i / stops; // 0=top, 1=bottom
-        // Invert: pos → value via inverse log1p
-        const val = logMap
-          ? Math.expm1((1 - pos) * Math.log1p(mxBar))
-          : mxBar * (1 - pos);
+        const pos = i / stops;
+        const val = gapMeanMode
+          ? mn + range * (1 - pos)
+          : logMap ? Math.expm1((1 - pos) * Math.log1p(mxBar)) : mxBar * (1 - pos);
         grad.append("stop")
           .attr("offset", `${pos * 100}%`)
           .attr("stop-color", color(val));
@@ -931,17 +977,16 @@
         .attr("width", legendW).attr("height", legendH)
         .attr("fill", "url(#lg)").attr("rx", 3);
 
-      // Tick labels
-      const ticks = logMap
-        ? [Math.max(mx, 20), 10, 3, 1, 0]
-        : [mx, mx / 2, 0];
+      const ticks = gapMeanMode
+        ? [mx, mn + range / 2, mn]
+        : logMap ? [Math.max(mx, 20), 10, 3, 1, 0] : [mx, mx / 2, 0];
 
       ticks.forEach(v => {
         const t = valToPos(v);
         legendSvg.append("text")
           .attr("x", legendW + 6).attr("y", top + 4 + t * legendH)
           .attr("fill", "#aaa").attr("font-size", 11)
-          .text(v.toFixed(0));
+          .text(v.toFixed(1));
       });
     }
   </script>

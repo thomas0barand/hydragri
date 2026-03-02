@@ -105,12 +105,24 @@ python scripts/export_json.py
 
 ## Visualization
 
-Single-page D3.js application (`viz.html`) — no build step, just a static file served over HTTP.
+Single-page D3.js applications — no build step, just static HTML served over HTTP. Three versions are available: `viz_v1.html`, `viz_v2.html`, `viz_v3.html` (recommended).
 
 ```bash
 python3 -m http.server 8000
-# open http://localhost:8000/viz.html
+# open http://localhost:8000/viz_v3.html
 ```
+
+### Version history (V1 → V2 → V3)
+
+| Version | File | Main changes |
+|---------|------|--------------|
+| **V1** | `viz_v1.html` | Initial release: multi-scale map, 4 indicators, time slider, tooltip, time series on cell click. |
+| **V2** | `viz_v2.html` | After peer review: regions on the map, “À propos” panel, description + metric formulas (collapsible), time series panel moved to the bottom. |
+| **V3** | `viz_v3.html` | Methodology and UX: references for Stock/Gap (FAO, Thornthwaite–Mather), “Moyenne (période)” to visualise stressed zones, time series placed above the time slider for coordination with the timeline. |
+
+**V1 → V2** (post peer review): Integration of **régions** (boundaries and labels) on the map; addition of the **À propos** panel (credits, project outline, sources, references, contact); addition of the **description** and **metric formulas** (Stock, Gap, P, ETP) in collapsible panels; time series panel moved **to the bottom** of the view.
+
+**V2 → V3**: Addition of **sources** used for the Stock and Gap calculation and **methodology** (FAO, Thornthwaite–Mather) in À propos; **“Moyenne (période)”** option to display time-averaged values and better identify structurally stressed zones (with adapted scale for mean Gap); time series panel **moved above the time slider** so the chart is aligned with the timeline and navigation is clearer.
 
 ### Features
 
